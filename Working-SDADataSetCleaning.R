@@ -72,32 +72,37 @@ guardian_raw <- read.csv("dummydata_guardian.csv")
 ## DATA CLEANING ----
 
 #clean student first and last names
-data_names <- data_raw |> mutate(
-        student_first = str_to_title(str_squish(str_replace_all(student_first, " - ","-"))),
-        student_last = str_to_title(str_squish(str_replace_all(student_last, " - ","-"))), 
-        student_last = str_replace_all(student_last,"Iv","IV"),
-        student_last = str_replace_all(student_last,"Iii","III"),
-        student_last = str_replace_all(student_last,"Ii","II"),
-        student_last = case_when(
-              str_starts(student_last,"Mc") 
-              ~ paste("Mc",str_to_title(substring(student_last,3)), sep = ""), 
-              TRUE ~ student_last))
+data_working <- data_raw |> mutate(
+  student_first = str_to_title(str_squish(str_replace_all(student_first, " - ","-"))),
+  student_last = str_to_title(str_squish(str_replace_all(student_last, " - ","-"))), 
+  student_last = str_replace_all(student_last,"Iv$","IV"),
+  student_last = str_replace_all(student_last,"Iii$","III"),
+  student_last = str_replace_all(student_last,"Ii$","II"),
+  student_last = case_when(
+    str_starts(student_last,"Mc") 
+    ~ paste("Mc",str_to_title(substring(student_last,3)), sep = ""), 
+    TRUE ~ student_last))
 
 
 #replace missing home language values
-df$home_lang <- sub("^$", "English", df$home_lang)
+data_working$home_lang <- sub("^$", "English", data_working$home_lang)
 
 #update zip and city
-data_address <- data_raw |> 
+data_working <- data_working |> 
   mutate(
     zip = substr(zip, start = 1, stop = 5),
     zip = case_when(
       str_detect(city, "MN") ~ substr(city, nchar(city)-4,nchar(city)),
       TRUE ~ zip), 
     city = gsub("\\,.*","",city),
+    city = str_to_title(str_squish(city)),
+    city = case_when(city == "St.paul",gsub("St.paul",city) ~ "Saint Paul",
+                     grepl("St..*",city) ~ "Saint",
+                     grepl("St*",city) ~"Saint",
+                     TRUE ~ city),
     address_1 = case_when(
       !is.na(address_2) ~ substr(address_1, 0, nchar(address_1)-(nchar(address_2))-1), 
-      TRUE ~ address_1),
+      is.na(address_2) ~ address_1),
     address_1 = str_to_title(str_squish(address_1)),
     address_2 = str_to_title(address_2),
     state = case_when(grepl("^55.*",zip) ~ "MN", 
@@ -105,9 +110,43 @@ data_address <- data_raw |>
                       TRUE ~ "NA"))
 
 #label with guardian
-### data_guardian <- guardian_raw |>
-  mutate(
-    c('guardian_1_first','guardian_1_last') = str_split_fixed(str_to_title(guardian_1)," ",2)
-  )
+guardian_working <- guardian_raw |> mutate(
+  guardian_1 = str_to_title(str_squish(str_replace_all(guardian_1, " - ","-"))),
+  guardian_1 = str_to_title(str_squish(str_replace_all(guardian_1, " - ","-"))), 
+  guardian_1 = str_replace_all(guardian_1,"Iv$","IV"),
+  guardian_1 = str_replace_all(guardian_1,"Iii$","III"),
+  guardian_1 = str_replace_all(guardian_1,"Ii$","II"),
+  guardian_2 = str_to_title(str_squish(str_replace_all(guardian_2, " - ","-"))),
+  guardian_2 = str_to_title(str_squish(str_replace_all(guardian_2, " - ","-"))), 
+  guardian_2 = str_replace_all(guardian_2,"Iv$","IV"),
+  guardian_2 = str_replace_all(guardian_2,"Iii$","III"),
+  guardian_2 = str_replace_all(guardian_2,"Ii$","II"))
 
+guardian_working <-
+  separate(guardian_working,guardian_1, into = c("guardian_1_first","guardian_1_last"), sep=" ", extra = "merge")
+
+guardian_working <-
+  separate(guardian_working,guardian_2, into = c("guardian_2_first","guardian_2_last"), sep=" ", extra = "merge")
+
+guardian_working <- guardian_working |> mutate(
+  is_match = ifelse(guardian_1_last == guardian_2_last,1,0))
+
+guardian_working <- guardian_working |> mutate(
+  guardian_1_last = case_when(
+    str_starts(guardian_1_last, "Mc")    
+    ~ paste("Mc",str_to_title(substring(guardian_1_last,3)), sep = ""), 
+    TRUE ~ guardian_1_last),
+  guardian_2_last = case_when(
+    str_starts(guardian_2_last, "Mc")    
+    ~ paste("Mc",str_to_title(substring(guardian_2_last,3)), sep = ""), 
+    TRUE ~ guardian_2_last))
+
+joined_set <- joined_set |> mutate(label = case_when(
+  is.na(guardian_1_first) ~ paste("Parent/Guardian of",student_first,student_last),
+  is.na(guardian_2_first) ~ paste(guardian_1_first,guardian_1_last),
+  is_match == 1 ~ paste(guardian_1_first,"&",guardian_2_first,guardian_1_last),
+  TRUE ~ paste(guardian_1_first,guardian_1_last,"&",guardian_2_first,guardian_2_last)
+))
 ## OUTPUT ----
+
+output <- select(joined_set, c('label','student_first','student_last'))
