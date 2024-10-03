@@ -73,35 +73,41 @@ guardian_raw <- read.csv("dummydata_guardian.csv")
 
 #clean student first and last names
 data_names <- data_raw |> mutate(
-  student_first = str_to_title(str_squish(str_replace_all(student_first, " - ","-"))),
-  student_last = str_to_title(str_squish(str_replace_all(student_last, " - ","-"))), 
-  student_last = str_replace_all(student_last,"Iv","IV"),
-  student_last = str_replace_all(student_last,"Iii","III"),
-  student_last = str_replace_all(student_last,"Ii","II"))
- # case_when(
- #   str_starts(student_last,"Mc") 
- #   ~ letter = substring(student_last,3,3)
- #   ~ student_last = substring(student_last,3,3)=letter)
+        student_first = str_to_title(str_squish(str_replace_all(student_first, " - ","-"))),
+        student_last = str_to_title(str_squish(str_replace_all(student_last, " - ","-"))), 
+        student_last = str_replace_all(student_last,"Iv","IV"),
+        student_last = str_replace_all(student_last,"Iii","III"),
+        student_last = str_replace_all(student_last,"Ii","II"),
+        student_last = case_when(
+              str_starts(student_last,"Mc") 
+              ~ paste("Mc",str_to_title(substring(student_last,3)), sep = ""), 
+              TRUE ~ student_last))
 
-  
-  ## IF student_last STARTS WITH "Mc"
-    ## THEN student_last = 
-    ## str_sub(student_last, 3)
-    ## str_to_title(student_last) 
-    ## paste("Mc",student_last)
-  ## ELSE student_last = student_last
-         
 
 #replace missing home language values
 df$home_lang <- sub("^$", "English", df$home_lang)
 
 #update zip and city
 data_address <- data_raw |> 
-       mutate(
-             zip = substr(zip, start = 1, stop = 5),
-             zip = case_when(
-                   str_detect(city, "MN") ~ substr(city, nchar(city)-4,nchar(city)),
-                   TRUE ~ zip), 
-             city = gsub("\\,.*","",city))
+  mutate(
+    zip = substr(zip, start = 1, stop = 5),
+    zip = case_when(
+      str_detect(city, "MN") ~ substr(city, nchar(city)-4,nchar(city)),
+      TRUE ~ zip), 
+    city = gsub("\\,.*","",city),
+    address_1 = case_when(
+      !is.na(address_2) ~ substr(address_1, 0, nchar(address_1)-(nchar(address_2))-1), 
+      TRUE ~ address_1),
+    address_1 = str_to_title(str_squish(address_1)),
+    address_2 = str_to_title(address_2),
+    state = case_when(grepl("^55.*",zip) ~ "MN", 
+                      grepl("^7.*",zip) ~"TX", 
+                      TRUE ~ "NA"))
+
+#label with guardian
+### data_guardian <- guardian_raw |>
+  mutate(
+    c('guardian_1_first','guardian_1_last') = str_split_fixed(str_to_title(guardian_1)," ",2)
+  )
 
 ## OUTPUT ----
